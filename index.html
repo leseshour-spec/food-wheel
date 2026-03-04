@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>吃什麼轉盤</title>
+  
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#0b0b0f">
+
+  <!-- iOS：加入桌面 + 全螢幕 -->
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="吃什麼">
+  <style>
+    :root { --bg:#0b0b0f; --text:#f2f2f2; --muted:#a7a7b3; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
+      background: radial-gradient(1200px 600px at 30% 10%, #1a1230 0%, var(--bg) 45%, #07070a 100%);
+      color: var(--text);
+    }
+    .wrap{ max-width:980px; margin:0 auto; padding:18px 16px 28px; }
+    h1{ font-size:20px; margin:8px 0 14px; letter-spacing:.5px; }
+
+    .grid{ display:grid; grid-template-columns:1.1fr .9fr; gap:14px; }
+    @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+    }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .btn{
+      padding:10px 14px; border-radius:12px;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.08);
+      color: var(--text); cursor:pointer;
+    }
+    .btn:hover{ background: rgba(255,255,255,.12); }
+    .btn.primary{
+      background: linear-gradient(135deg, rgba(255,215,0,.25), rgba(255,255,255,.08));
+      border-color: rgba(255,215,0,.35);
+    }
+    .btn.danger{ background: rgba(255,80,80,.12); border-color: rgba(255,80,80,.35); }
+    .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+    .pill{
+      padding:7px 10px; border:1px solid rgba(255,255,255,.12);
+      border-radius:999px; background: rgba(0,0,0,.18);
+      color: var(--muted); font-size:12px;
+    }
+    .label{ color: var(--muted); font-size:12px; margin-bottom:6px; }
+    .result{
+      font-size:18px; font-weight:750;
+      padding:12px; border-radius:14px;
+      border:1px dashed rgba(255,255,255,.20);
+      background: rgba(0,0,0,.22);
+      transform: scale(1);
+    }
+    input{
+      flex:1; min-width:200px; padding:10px 12px; border-radius:12px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(0,0,0,.25);
+      color: var(--text); outline:none;
+    }
+    input::placeholder{ color: rgba(255,255,255,.35); }
+
+    .list{ margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; }
+    .tag{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      font-size:13px;
+    }
+    .x{
+      width:22px; height:22px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.20);
+      background: rgba(0,0,0,.25); color: var(--text);
+      cursor:pointer; line-height:18px;
+    }
+    .x:hover{ background: rgba(255,80,80,.18); border-color: rgba(255,80,80,.35); }
+
+    .hint{ color: var(--muted); font-size:12px; margin-top:8px; line-height:1.5; }
+
+    canvas{ width:100%; height:auto; display:block; }
+    .canvasWrap{ position:relative; border-radius: 18px; }
+
+    /* ✅ 指針在右邊，尖尖朝左（指向轉盤） */
+    .pointer{
+      position:absolute;
+      top: 50%;
+      right: 2px;
+      transform: translateY(-50%);
+      width:0; height:0;
+      border-top: 12px solid transparent;
+      border-bottom: 12px solid transparent;
+      border-right: 20px solid rgba(255,215,0,.95);
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,.55));
+      z-index: 6;
+      pointer-events:none;
+    }
+
+    .ring{
+      position:absolute; inset:10px;
+      border-radius:50%;
+      border:1px solid rgba(255,215,0,.25);
+      pointer-events:none;
+      box-shadow: 0 0 0 8px rgba(0,0,0,.12) inset;
+      z-index: 2;
+    }
+
+    /* ✅ 中心按鈕 hover/active */
+    .canvasWrap.center-hover .ring{
+      border-color: rgba(255,215,0,.42);
+      box-shadow:
+        0 0 0 8px rgba(0,0,0,.12) inset,
+        0 0 22px rgba(255,215,0,.16);
+    }
+    .canvasWrap.center-active .ring{
+      border-color: rgba(255,215,0,.60);
+      box-shadow:
+        0 0 0 8px rgba(0,0,0,.12) inset,
+        0 0 34px rgba(255,215,0,.30);
+    }
+
+    /* ✅ 中獎：金光閃 */
+    @keyframes winFlash {
+      0%   { box-shadow: 0 0 0 rgba(255,215,0,0); }
+      40%  { box-shadow: 0 0 90px rgba(255,215,0,0.55); }
+      100% { box-shadow: 0 0 0 rgba(255,215,0,0); }
+    }
+    .canvasWrap.winEffect{
+      animation: winFlash 0.8s ease-out;
+    }
+
+    /* ✅ 中獎：結果文字彈跳 */
+    @keyframes winPop {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.30); }
+      70%  { transform: scale(0.96); }
+      100% { transform: scale(1); }
+    }
+    .result.winText{
+      animation: winPop 0.6s cubic-bezier(.34,1.56,.64,1);
+    }
+
+    .foot{ color: rgba(255,255,255,.55); font-size:12px; margin-top:10px; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>🎡 吃什麼轉盤</h1>
+
+    <div class="grid">
+      <div class="card">
+        <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+          <div class="pill" id="modePill">模式：類別轉盤</div>
+          <div class="row">
+            <button class="btn primary" id="spinBtn">轉起來</button>
+            <button class="btn" id="switchBtn" disabled>切到店家盤</button>
+            <button class="btn" id="backBtn" disabled>回到類別盤</button>
+            <button class="btn danger" id="resetBtn">清空資料</button>
+          </div>
+        </div>
+
+        <div class="canvasWrap" id="canvasWrap">
+          <div class="pointer" aria-hidden="true"></div>
+          <div class="ring" aria-hidden="true"></div>
+          <canvas id="wheel" width="900" height="900"></canvas>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div class="label">結果</div>
+          <div class="result" id="resultBox">尚未轉動</div>
+          <div class="hint" id="hintBox">先轉「類別」，選到後就能在右邊新增店家，再切到「店家盤」轉店家。</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label">目前選到的類別</div>
+        <div class="result" id="pickedCategory">尚未選擇</div>
+
+        <div style="height:12px"></div>
+
+        <div class="label">新增店家（會存起來）</div>
+        <div class="row">
+          <input id="shopInput" placeholder="輸入店名（例如：藏壽司 / 某某牛肉麵）" disabled />
+          <button class="btn" id="addShopBtn" disabled>加入</button>
+        </div>
+
+        <div class="hint">小技巧：店家越多，輪盤越有趣；也能刪掉不想吃的。</div>
+
+        <div style="height:12px"></div>
+
+        <div class="label">這個類別的店家清單</div>
+        <div class="list" id="shopList"></div>
+
+        <div class="foot"> </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ====== Default Categories ======
+  const DEFAULT_CATEGORIES = [
+    "鍋物","小吃","便當","鐵板燒","韓式料理","咖哩","水餃","早餐店",
+    "越式","速食","牛肉麵","日式","義式","早午餐"
+  ];
+
+  // ====== Seeded Shops (你的名單) ======
+  const SEEDED_SHOPS = {
+    "便當": ["鬍鬚張","梁社漢","瑞哥雞肉飯","享奇蹟雞肉飯","厚切排骨便當","燒臘","君悅排骨"],
+    "速食": ["麥當勞","肯德基","頂呱呱","披薩店"],
+    "鍋物": ["12MINI","MOMO","三媽","神來一鍋","傳奇鍋物","酸菜魚"],
+    "小吃": ["圓環肉羹","臭豆腐小吃"],
+    "鐵板燒": ["大潤發鐵板燒","大埔","HOT7","王朝"],
+    "韓式料理": ["金春喜韓廚","八色烤肉","站著吃","捐豆腐"],
+    "咖哩": ["SUKIYA","品田牧場","東大關"],
+    "水餃": ["八方雲集","北大荒","文德鍋貼"],
+    "早餐店": ["麥味登","拉亞漢堡"],
+    "越式": ["越南河粉"],
+    "牛肉麵": ["牛閣","牛爸爸","鄧家牛肉麵","牛將軍","牛耳","18冠軍牛肉麵","桃花源記"],
+    "日式": ["品田牧場","SUKIYA","爭鮮","百八牧場","樂澄"],
+    "義式": ["CalaCala","Pastaio","Timama","LaPasta"],
+    "早午餐": ["漫時生活","Timama","Take out burger","Second Floor."]
+  };
+
+  // ====== Config ======
+  const LS_KEY = "food_wheel_canvas_v6";
+  const CENTER_RADIUS = 92;
+
+  // ✅ 指針在右邊 & 尖尖朝左 => 指針命中角度是「正右方」(0)
+  const POINTER_ANGLE = 0;
+
+  // ====== Utils ======
+  const uniq = (arr) => {
+    const seen = new Set();
+    const out = [];
+    for (const x of arr) {
+      const k = String(x).trim();
+      if (!k) continue;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(k);
+    }
+    return out;
+  };
+
+  function mergeSeeded(shopsByCategory){
+    for(const c of DEFAULT_CATEGORIES){
+      if(!shopsByCategory[c]) shopsByCategory[c] = [];
+      const existing = shopsByCategory[c];
+      const seeded = SEEDED_SHOPS[c] || [];
+      shopsByCategory[c] = uniq(existing.concat(seeded));
+    }
+    return shopsByCategory;
+  }
+
+  function loadData(){
+    const raw = localStorage.getItem(LS_KEY);
+    const base = {
+      categories: DEFAULT_CATEGORIES.slice(),
+      shopsByCategory: Object.fromEntries(DEFAULT_CATEGORIES.map(c => [c, []]))
+    };
+
+    if(!raw){
+      base.shopsByCategory = mergeSeeded(base.shopsByCategory);
+      return base;
+    }
+
+    try{
+      const d = JSON.parse(raw);
+      if(!d.categories || !d.shopsByCategory) throw new Error("bad");
+
+      for(const c of DEFAULT_CATEGORIES){
+        if(!d.categories.includes(c)) d.categories.push(c);
+        if(!d.shopsByCategory[c]) d.shopsByCategory[c] = [];
+      }
+      d.shopsByCategory = mergeSeeded(d.shopsByCategory);
+      return d;
+    }catch{
+      localStorage.removeItem(LS_KEY);
+      base.shopsByCategory = mergeSeeded(base.shopsByCategory);
+      return base;
+    }
+  }
+
+  function saveData(d){ localStorage.setItem(LS_KEY, JSON.stringify(d)); }
+
+  let data = loadData();
+  saveData(data);
+
+  // ====== UI ======
+  const canvasWrap = document.getElementById("canvasWrap");
+  const canvas = document.getElementById("wheel");
+  const ctx = canvas.getContext("2d");
+  const spinBtn = document.getElementById("spinBtn");
+  const switchBtn = document.getElementById("switchBtn");
+  const backBtn = document.getElementById("backBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const modePill = document.getElementById("modePill");
+  const resultBox = document.getElementById("resultBox");
+  const hintBox = document.getElementById("hintBox");
+  const pickedCategoryEl = document.getElementById("pickedCategory");
+  const shopInput = document.getElementById("shopInput");
+  const addShopBtn = document.getElementById("addShopBtn");
+  const shopListEl = document.getElementById("shopList");
+
+  // ====== Audio Tick + Ding ======
+  let audioCtx = null;
+  function ensureAudio(){
+    if(audioCtx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return;
+    audioCtx = new AC();
+  }
+
+  function playTick(){
+    if(!audioCtx) return;
+    if(audioCtx.state === "suspended"){ audioCtx.resume().catch(()=>{}); }
+
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = "square";
+    osc.frequency.setValueAtTime(1800, t);
+
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start(t);
+    osc.stop(t + 0.035);
+  }
+
+  //播放選到的音
+  function playDing() {
+  if (!audioCtx) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+
+  const now = audioCtx.currentTime;
+  // 定義一個上升的和弦頻率 (E Major: E6, G#6, B6, E7)
+  const frequencies = [1318.51, 1661.22, 1975.53, 2637.02];
+  
+  frequencies.forEach((freq, i) => {
+    const startTime = now + (i * 0.1); // 每個音間隔 0.1 秒，形成爬升感
+    const duration = 0.8;
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    // 使用 'triangle' 增加一點點厚度，或是 'sine' 保持純淨
+    osc.type = i === frequencies.length - 1 ? "square" : "triangle"; 
+    osc.frequency.setValueAtTime(freq, startTime);
+    
+    // 結尾音稍微往上飄，增加興奮感
+    osc.frequency.exponentialRampToValueAtTime(freq * 1.05, startTime + duration);
+
+    // 能量包絡
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.linearRampToValueAtTime(0.2, startTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+  });
+  }
+
+  // ====== Wheel State ======
+  let mode = "category"; // category | shop
+  let selectedCategory = null;
+
+  let angle = 0;
+  let angVel = 0;
+  let spinning = false;
+  let lastTime = 0;
+  let lastPointerIndex = null;
+
+  function getItems(){
+    if(mode === "category") return data.categories.slice();
+    if(!selectedCategory) return [];
+    return (data.shopsByCategory[selectedCategory] || []).slice();
+  }
+
+  // ====== Drawing ======
+  function clear(){ ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+  function drawWheel(){
+    const items = getItems();
+    const cx = canvas.width/2;
+    const cy = canvas.height/2;
+    const r = Math.min(cx, cy) - 24;
+
+    clear();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r+10, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(0,0,0,.20)";
+    ctx.fill();
+
+    if(items.length === 0){
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,.05)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.12)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255,255,255,.75)";
+      ctx.font = "700 28px system-ui, -apple-system, 'Noto Sans TC'";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(mode === "shop" ? "先新增店家" : "無項目", cx, cy);
+      return;
+    }
+
+    const n = items.length;
+    const slice = (Math.PI*2)/n;
+
+    for(let i=0;i<n;i++){
+      const start = angle + i*slice;
+      const end = start + slice;
+
+      const shade = (i % 2 === 0) ? 0.18 : 0.08;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, start, end);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(255,255,255,${shade})`;
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,255,255,.10)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      const mid = (start + end)/2;
+      const text = items[i];
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(mid);
+
+      ctx.fillStyle = "rgba(255,255,255,.92)";
+      ctx.font = "800 30px system-ui, -apple-system, 'Noto Sans TC'";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,.6)";
+      ctx.shadowBlur = 8;
+
+      const maxWidth = r * 0.62;
+      let drawText = text;
+      while(ctx.measureText(drawText).width > maxWidth && drawText.length > 4){
+        drawText = drawText.slice(0, -1);
+      }
+      if(drawText !== text) drawText = drawText + "…";
+
+      ctx.fillText(drawText, r - 10, 0);
+      ctx.restore();
+    }
+
+    // center cap
+    ctx.beginPath();
+    ctx.arc(cx, cy, CENTER_RADIUS, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(0,0,0,.35)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,215,0,.25)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,215,0,.95)";
+    ctx.font = "800 20px system-ui, -apple-system, 'Noto Sans TC'";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(mode === "category" ? "類別" : "店家", cx, cy - 12);
+
+    ctx.fillStyle = "rgba(255,255,255,.80)";
+    ctx.font = "700 14px system-ui, -apple-system, 'Noto Sans TC'";
+    ctx.fillText("點中間也能轉", cx, cy + 18);
+  }
+
+  // ====== Picking Logic ======
+  function pointerIndex(){
+    const items = getItems();
+    const n = items.length;
+    if(n === 0) return null;
+    const slice = (Math.PI*2)/n;
+
+    let a = (POINTER_ANGLE - angle) % (Math.PI*2);
+    if(a < 0) a += Math.PI*2;
+    return Math.floor(a / slice);
+  }
+
+  function pickAtPointer(){
+    const items = getItems();
+    const idx = pointerIndex();
+    if(idx === null) return null;
+    return { item: items[idx], index: idx };
+  }
+
+  function triggerWinEffects(){
+    // 金光閃
+    canvasWrap.classList.remove("winEffect");
+    void canvasWrap.offsetWidth; // restart animation
+    canvasWrap.classList.add("winEffect");
+    setTimeout(()=> canvasWrap.classList.remove("winEffect"), 900);
+
+    // 文字彈跳
+    resultBox.classList.remove("winText");
+    void resultBox.offsetWidth;
+    resultBox.classList.add("winText");
+    setTimeout(()=> resultBox.classList.remove("winText"), 700);
+  }
+
+  // ====== Animation ======
+  function raf(ts){
+    if(!spinning) return;
+
+    const dt = Math.min((ts - lastTime)/1000, 0.033);
+    lastTime = ts;
+
+    const friction = 0.985;
+    angVel *= Math.pow(friction, dt*60);
+
+    angle += angVel * dt;
+
+    const idx = pointerIndex();
+    if(idx !== null && lastPointerIndex !== null && idx !== lastPointerIndex){
+      playTick();
+    }
+    lastPointerIndex = idx;
+
+    drawWheel();
+
+    if(Math.abs(angVel) < 0.12){
+      spinning = false;
+      angVel = 0;
+
+      // ✅ 停下來：盯～ + 金光 + 彈跳
+      playDing();
+      triggerWinEffects();
+
+      const picked = pickAtPointer();
+      if(picked){
+        if(mode === "category"){
+          selectedCategory = picked.item;
+          pickedCategoryEl.textContent = selectedCategory;
+          resultBox.textContent = `類別：${picked.item}`;
+          hintBox.textContent = "右邊新增/確認這個類別的店家後，可切到店家盤再轉一次。";
+          renderShopList();
+        }else{
+          resultBox.textContent = `店家：${picked.item}`;
+          hintBox.textContent = "不滿意？再轉一次，或按『回到類別盤』換口味。";
+        }
+      }
+      updateButtons();
+      return;
+    }
+
+    requestAnimationFrame(raf);
+  }
+
+  function spin(){
+    const items = getItems();
+    if(items.length === 0) return;
+
+    ensureAudio();
+    spinning = true;
+    lastTime = performance.now();
+    lastPointerIndex = pointerIndex();
+
+    const base = 9.5 + Math.random()*4.5;
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    angVel = base * dir;
+
+    updateButtons();
+    requestAnimationFrame(raf);
+  }
+
+  // ====== Shops List ======
+  function renderShopList(){
+    shopListEl.innerHTML = "";
+    if(!selectedCategory){
+      shopListEl.innerHTML = `<div class="pill">先轉到一個類別</div>`;
+      return;
+    }
+    const shops = data.shopsByCategory[selectedCategory] || [];
+    if(shops.length === 0){
+      shopListEl.innerHTML = `<div class="pill">這個類別還沒有店家，先新增幾家</div>`;
+      return;
+    }
+
+    shops.forEach((name, i) => {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = name;
+
+      const x = document.createElement("button");
+      x.className = "x";
+      x.textContent = "×";
+      x.title = "刪除";
+      x.onclick = () => {
+        data.shopsByCategory[selectedCategory].splice(i, 1);
+        saveData(data);
+        renderShopList();
+        if(mode === "shop") drawWheel();
+        updateButtons();
+      };
+
+      tag.appendChild(x);
+      shopListEl.appendChild(tag);
+    });
+  }
+
+  // ====== Buttons / State ======
+  function updateButtons(){
+    const items = getItems();
+    spinBtn.disabled = spinning || items.length === 0;
+
+    const shopsOk = !!selectedCategory && (data.shopsByCategory[selectedCategory] || []).length > 0;
+    switchBtn.disabled = spinning || (mode === "category" && !shopsOk);
+
+    backBtn.disabled = spinning || (mode !== "shop");
+
+    shopInput.disabled = !selectedCategory || spinning;
+    addShopBtn.disabled = !selectedCategory || spinning;
+    resetBtn.disabled = spinning;
+
+    modePill.textContent = `模式：${mode === "category" ? "類別轉盤" : "店家轉盤"}`;
+  }
+
+  function setMode(next){
+    mode = next;
+    resultBox.textContent = "尚未轉動";
+    hintBox.textContent = mode === "category"
+      ? "先轉類別，選到後再新增店家，然後切到店家盤。"
+      : "現在是店家盤：按『轉起來』抽店家！";
+    drawWheel();
+    updateButtons();
+  }
+
+  // ====== Center hover/active + center click ======
+  function canvasPointToLocal(e){
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
+  }
+  function isInCenter(x, y){
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const dx = x - cx;
+    const dy = y - cy;
+    return (dx*dx + dy*dy) <= (CENTER_RADIUS * CENTER_RADIUS);
+  }
+
+  function updateCenterHover(e){
+    const {x,y} = canvasPointToLocal(e);
+    const hit = isInCenter(x,y);
+    canvasWrap.classList.toggle("center-hover", hit);
+    canvas.style.cursor = hit ? "pointer" : "default";
+  }
+
+  canvas.addEventListener("mousemove", updateCenterHover);
+  canvas.addEventListener("mouseleave", () => {
+    canvasWrap.classList.remove("center-hover");
+    canvasWrap.classList.remove("center-active");
+    canvas.style.cursor = "default";
+  });
+
+  canvas.addEventListener("mousedown", (e) => {
+    const {x,y} = canvasPointToLocal(e);
+    if(isInCenter(x,y)){
+      canvasWrap.classList.add("center-active");
+    }
+  });
+  window.addEventListener("mouseup", () => {
+    canvasWrap.classList.remove("center-active");
+  });
+
+  canvas.addEventListener("touchstart", (e) => {
+    const t = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (t.clientX - rect.left) * scaleX;
+    const y = (t.clientY - rect.top) * scaleY;
+    if(isInCenter(x,y)){
+      canvasWrap.classList.add("center-active");
+    }
+  }, {passive:true});
+  canvas.addEventListener("touchend", () => {
+    canvasWrap.classList.remove("center-active");
+  });
+
+  canvas.addEventListener("click", (e) => {
+    if(spinning) return;
+    const {x,y} = canvasPointToLocal(e);
+    if(isInCenter(x,y)){
+      spin();
+    }
+  });
+
+  // ====== Events ======
+  spinBtn.addEventListener("click", spin);
+
+  switchBtn.addEventListener("click", () => {
+    if(spinning) return;
+    if(mode !== "category") return;
+
+    if(!selectedCategory) return;
+    const shops = data.shopsByCategory[selectedCategory] || [];
+    if(shops.length === 0) return;
+
+    setMode("shop");
+  });
+
+  backBtn.addEventListener("click", () => {
+    if(spinning) return;
+    setMode("category");
+  });
+
+  resetBtn.addEventListener("click", () => {
+    localStorage.removeItem(LS_KEY);
+    data = loadData();
+    saveData(data);
+    selectedCategory = null;
+    pickedCategoryEl.textContent = "尚未選擇";
+    shopInput.value = "";
+    renderShopList();
+    setMode("category");
+  });
+
+  addShopBtn.addEventListener("click", () => {
+    if(!selectedCategory) return;
+    const name = shopInput.value.trim();
+    if(!name) return;
+
+    const list = data.shopsByCategory[selectedCategory] || (data.shopsByCategory[selectedCategory] = []);
+    if(!list.includes(name)) list.push(name);
+    shopInput.value = "";
+    saveData(data);
+
+    renderShopList();
+    if(mode === "shop") drawWheel();
+    updateButtons();
+  });
+
+  shopInput.addEventListener("keydown", (e) => {
+    if(e.key === "Enter" && !addShopBtn.disabled) addShopBtn.click();
+  });
+
+  // ====== init ======
+  drawWheel();
+  renderShopList();
+  updateButtons();
+})();
+</script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(console.error);
+    });
+  }
+</script>
+</body>
+</html>
